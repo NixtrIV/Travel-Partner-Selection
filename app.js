@@ -38,32 +38,8 @@ function initIndexPage() {
   const inviterName = urlParams.get('inviterName');
   
   if (quizId && inviterName) {
-    // 被邀请，从URL获取邀请者的答案
-    const inviterAnswersStr = urlParams.get('inviterAnswers') || '';
-    const inviterAnswers = inviterAnswersStr ? inviterAnswersStr.split('') : [];
-    
-    // 保存邀请者信息到 localStorage
-    const quizData = {
-      inviterName: inviterName,
-      inviterAnswers: inviterAnswers,
-      inviteeAnswers: null,
-      createTime: Date.now()
-    };
-    localStorage.setItem(`quiz_${quizId}`, JSON.stringify(quizData));
-    
-    // 修改页面提示
-    document.querySelector('.subtitle').textContent = `${inviterName}邀请你一起测试旅行搭子匹配度！`;
-    userNameInput.placeholder = '请输入你的昵称，开始测试';
-    
-    // 被邀请者点击开始，直接跳转到答题页
-    startBtn.addEventListener('click', function() {
-      const userName = userNameInput.value.trim();
-      if (!userName) {
-        showToast('请输入你的昵称');
-        return;
-      }
-      window.location.href = `quiz.html?quizId=${quizId}&invitee=true&inviterName=${encodeURIComponent(inviterName)}`;
-    });
+    // 被邀请，直接跳转到答题页
+    window.location.href = `quiz.html?quizId=${quizId}&invitee=true&inviterName=${encodeURIComponent(inviterName)}`;
     return;
   }
   
@@ -214,34 +190,8 @@ function initResultPage() {
   const urlParams = new URLSearchParams(window.location.search);
   state.quizId = urlParams.get('quizId');
   state.isInvitee = urlParams.get('isInvitee') === 'true';
-  const viewMatch = urlParams.get('viewMatch') === 'true';
-  
-  // 如果是查看匹配结果的链接（包含双方答案）
-  if (viewMatch) {
-    const inviterName = decodeURIComponent(urlParams.get('inviterName') || '邀请者');
-    const inviterAnswersStr = urlParams.get('inviterAnswers') || '';
-    const inviteeAnswersStr = urlParams.get('inviteeAnswers') || '';
-    
-    const inviterAnswers = inviterAnswersStr ? inviterAnswersStr.split('') : [];
-    const inviteeAnswers = inviteeAnswersStr ? inviteeAnswersStr.split('') : [];
-    
-    if (inviterAnswers.length === 10 && inviteeAnswers.length === 10) {
-      const matchResult = calculateMatch(inviterAnswers, inviteeAnswers);
-      const quizData = { inviterName: inviterName };
-      renderMatchResult(matchResult, quizData);
-      bindResultEvents();
-      return;
-    }
-  }
   
   const quizData = JSON.parse(localStorage.getItem(`quiz_${state.quizId}`) || '{}');
-  state.inviterName = quizData.inviterName || '';
-  
-  // 如果被邀请者打开的是结果页，跳转到首页
-  if (state.isInvitee && !quizData.inviteeAnswers) {
-    window.location.href = `index.html?quizId=${state.quizId}&inviterName=${encodeURIComponent(state.inviterName || '')}`;
-    return;
-  }
   
   if (state.isInvitee) {
     // 被邀请者，显示匹配结果
@@ -320,18 +270,6 @@ function renderSingleResult(answers, userName, canInvite) {
   if (canInvite) {
     document.getElementById('inviteeSection').style.display = 'block';
   }
-  
-  // 如果是被邀请者，显示分享匹配结果给邀请者的按钮
-  if (state.isInvitee) {
-    const inviteeSection = document.getElementById('inviteeSection');
-    inviteeSection.style.display = 'block';
-    inviteeSection.querySelector('p').textContent = '测试完成！把匹配结果发给邀请者吧';
-    const inviteBtn = document.getElementById('inviteBtn');
-    inviteBtn.textContent = '📤 把匹配结果发给邀请者';
-    inviteBtn.onclick = function() {
-      shareMatchResultWithInviter();
-    };
-  }
 }
 
 // 绑定结果页事件
@@ -361,28 +299,9 @@ function bindResultEvents() {
 
 // 复制邀请链接
 function copyInviteLink() {
-  // 把邀请者的答案编码进链接，这样被邀请者不用共享localStorage也能计算匹配度
-  const quizData = JSON.parse(localStorage.getItem(`quiz_${state.quizId}`) || '{}');
-  const answersStr = quizData.inviterAnswers ? quizData.inviterAnswers.join('') : '';
-  
-  // 不管当前在哪个页面，都生成指向 index.html 的链接
-  const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-  const inviteUrl = `${window.location.origin}${basePath}index.html?quizId=${state.quizId}&inviterName=${encodeURIComponent(state.inviterName || '好友')}&inviterAnswers=${answersStr}`;
+  const inviteUrl = `${window.location.origin}${window.location.pathname.replace('quiz.html', 'index.html')}?quizId=${state.quizId}&inviterName=${encodeURIComponent(state.inviterName || '好友')}`;
   copyToClipboard(inviteUrl);
   showToast('邀请链接已复制！发给你的旅伴吧');
-}
-
-// 分享匹配结果给邀请者
-function shareMatchResultWithInviter() {
-  const quizData = JSON.parse(localStorage.getItem(`quiz_${state.quizId}`) || '{}');
-  const inviterAnswersStr = quizData.inviterAnswers ? quizData.inviterAnswers.join('') : '';
-  const inviteeAnswersStr = quizData.inviteeAnswers ? quizData.inviteeAnswers.join('') : '';
-  
-  const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
-  const resultUrl = `${window.location.origin}${basePath}result.html?viewMatch=true&quizId=${state.quizId}&inviterName=${encodeURIComponent(quizData.inviterName || '')}&inviterAnswers=${inviterAnswersStr}&inviteeAnswers=${inviteeAnswersStr}`;
-  
-  copyToClipboard(resultUrl);
-  showToast('匹配结果链接已复制！发给邀请者查看');
 }
 
 // 复制到剪贴板
