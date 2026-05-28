@@ -38,8 +38,32 @@ function initIndexPage() {
   const inviterName = urlParams.get('inviterName');
   
   if (quizId && inviterName) {
-    // 被邀请，直接跳转到答题页
-    window.location.href = `quiz.html?quizId=${quizId}&invitee=true&inviterName=${encodeURIComponent(inviterName)}`;
+    // 被邀请，从URL获取邀请者的答案
+    const inviterAnswersStr = urlParams.get('inviterAnswers') || '';
+    const inviterAnswers = inviterAnswersStr ? inviterAnswersStr.split('') : [];
+    
+    // 保存邀请者信息到 localStorage
+    const quizData = {
+      inviterName: inviterName,
+      inviterAnswers: inviterAnswers,
+      inviteeAnswers: null,
+      createTime: Date.now()
+    };
+    localStorage.setItem(`quiz_${quizId}`, JSON.stringify(quizData));
+    
+    // 修改页面提示
+    document.querySelector('.subtitle').textContent = `${inviterName}邀请你一起测试旅行搭子匹配度！`;
+    userNameInput.placeholder = '请输入你的昵称，开始测试';
+    
+    // 被邀请者点击开始，直接跳转到答题页
+    startBtn.addEventListener('click', function() {
+      const userName = userNameInput.value.trim();
+      if (!userName) {
+        showToast('请输入你的昵称');
+        return;
+      }
+      window.location.href = `quiz.html?quizId=${quizId}&invitee=true&inviterName=${encodeURIComponent(inviterName)}`;
+    });
     return;
   }
   
@@ -190,8 +214,34 @@ function initResultPage() {
   const urlParams = new URLSearchParams(window.location.search);
   state.quizId = urlParams.get('quizId');
   state.isInvitee = urlParams.get('isInvitee') === 'true';
+  const viewMatch = urlParams.get('viewMatch') === 'true';
+  
+  // 如果是查看匹配结果的链接（包含双方答案）
+  if (viewMatch) {
+    const inviterName = decodeURIComponent(urlParams.get('inviterName') || '邀请者');
+    const inviterAnswersStr = urlParams.get('inviterAnswers') || '';
+    const inviteeAnswersStr = urlParams.get('inviteeAnswers') || '';
+    
+    const inviterAnswers = inviterAnswersStr ? inviterAnswersStr.split('') : [];
+    const inviteeAnswers = inviteeAnswersStr ? inviteeAnswersStr.split('') : [];
+    
+    if (inviterAnswers.length === 10 && inviteeAnswers.length === 10) {
+      const matchResult = calculateMatch(inviterAnswers, inviteeAnswers);
+      const quizData = { inviterName: inviterName };
+      renderMatchResult(matchResult, quizData);
+      bindResultEvents();
+      return;
+    }
+  }
   
   const quizData = JSON.parse(localStorage.getItem(`quiz_${state.quizId}`) || '{}');
+  state.inviterName = quizData.inviterName || '';
+  
+  // 如果被邀请者打开的是结果页，跳转到首页
+  if (state.isInvitee && !quizData.inviteeAnswers) {
+    window.location.href = `index.html?quizId=${state.quizId}&inviterName=${encodeURIComponent(state.inviterName || '')}`;
+    return;
+  }
   
   if (state.isInvitee) {
     // 被邀请者，显示匹配结果
@@ -211,7 +261,25 @@ function initResultPage() {
 
 // 渲染匹配结果
 function renderMatchResult(result, quizData) {
-  document.getElementById('scoreNumber').textContent = `${result.score}%`;
+  // 根据分数选择对应的场景图片
+  let matchImg;
+  if (result.score >= 80) {
+    matchImg = 'imgs/match_80_捡到宝了.jpg';
+  } else if (result.score >= 60) {
+    matchImg = 'imgs/match_60_还能抢救.jpg';
+  } else if (result.score >= 40) {
+    matchImg = 'imgs/match_40_和平协议.jpg';
+  } else {
+    matchImg = 'imgs/match_20_分头行动.jpg';
+  }
+  
+  document.getElementById('scoreNumber').innerHTML = `
+    <div style="text-align: center;">
+      <img src="${matchImg}" alt="匹配场景" style="width: 200px; height: 200px; object-fit: contain; border-radius: 12px; margin-bottom: 10px;">
+      <div style="font-size: 48px; font-weight: bold; color: #6366f1;">${result.score}%</div>
+    </div>
+  `;
+  document.getElementById('scoreNumber').style.fontSize = 'inherit';
   document.getElementById('resultTitle').textContent = '你们的匹配度';
   document.getElementById('resultDesc').textContent = `${quizData.inviterName} vs 你`;
   
@@ -240,8 +308,9 @@ function renderMatchResult(result, quizData) {
 function renderSingleResult(answers, userName, canInvite) {
   const style = getTravelStyle(answers);
   
-  document.getElementById('scoreNumber').textContent = style.icon;
-  document.getElementById('scoreNumber').style.fontSize = '72px';
+  // 用图片替换emoji
+  document.getElementById('scoreNumber').innerHTML = `<img src="${style.icon}" alt="${style.name}" style="width: 180px; height: 180px; object-fit: contain; border-radius: 12px;">`;
+  document.getElementById('scoreNumber').style.fontSize = 'inherit';
   document.getElementById('resultTitle').textContent = style.name;
   document.getElementById('resultDesc').textContent = `${userName}的旅行风格`;
   document.getElementById('resultIcon').textContent = '✈️';
@@ -269,6 +338,18 @@ function renderSingleResult(answers, userName, canInvite) {
   // 显示邀请按钮
   if (canInvite) {
     document.getElementById('inviteeSection').style.display = 'block';
+  }
+  
+  // 如果是被邀请者，显示分享匹配结果给邀请者的按钮
+  if (state.isInvitee) {
+    const inviteeSection = document.getElementById('inviteeSection');
+    inviteeSection.style.display = 'block';
+    inviteeSection.querySelector('p').textContent = '测试完成！把匹配结果发给邀请者吧';
+    const inviteBtn = document.getElementById('inviteBtn');
+    inviteBtn.textContent = '📤 把匹配结果发给邀请者';
+    inviteBtn.onclick = function() {
+      shareMatchResultWithInviter();
+    };
   }
 }
 
@@ -299,9 +380,28 @@ function bindResultEvents() {
 
 // 复制邀请链接
 function copyInviteLink() {
-  const inviteUrl = `${window.location.origin}${window.location.pathname.replace('quiz.html', 'index.html')}?quizId=${state.quizId}&inviterName=${encodeURIComponent(state.inviterName || '好友')}`;
+  // 把邀请者的答案编码进链接，这样被邀请者不用共享localStorage也能计算匹配度
+  const quizData = JSON.parse(localStorage.getItem(`quiz_${state.quizId}`) || '{}');
+  const answersStr = quizData.inviterAnswers ? quizData.inviterAnswers.join('') : '';
+  
+  // 不管当前在哪个页面，都生成指向 index.html 的链接
+  const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+  const inviteUrl = `${window.location.origin}${basePath}index.html?quizId=${state.quizId}&inviterName=${encodeURIComponent(state.inviterName || '好友')}&inviterAnswers=${answersStr}`;
   copyToClipboard(inviteUrl);
   showToast('邀请链接已复制！发给你的旅伴吧');
+}
+
+// 分享匹配结果给邀请者
+function shareMatchResultWithInviter() {
+  const quizData = JSON.parse(localStorage.getItem(`quiz_${state.quizId}`) || '{}');
+  const inviterAnswersStr = quizData.inviterAnswers ? quizData.inviterAnswers.join('') : '';
+  const inviteeAnswersStr = quizData.inviteeAnswers ? quizData.inviteeAnswers.join('') : '';
+  
+  const basePath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
+  const resultUrl = `${window.location.origin}${basePath}result.html?viewMatch=true&quizId=${state.quizId}&inviterName=${encodeURIComponent(quizData.inviterName || '')}&inviterAnswers=${inviterAnswersStr}&inviteeAnswers=${inviteeAnswersStr}`;
+  
+  copyToClipboard(resultUrl);
+  showToast('匹配结果链接已复制！发给邀请者查看');
 }
 
 // 复制到剪贴板
@@ -354,23 +454,23 @@ function generateAnalysis(answers1, answers2, score) {
   
   if (score >= 80) {
     analysis.push({
-      title: "🎉 完美拍档！",
-      text: "你们的旅行习惯高度契合，一起旅行一定会非常愉快！"
+      title: "🎉 捡到宝了！",
+      text: "你们上辈子就是同一个妈生的旅行灵魂，赶紧买票出发吧！"
     });
   } else if (score >= 60) {
     analysis.push({
-      title: "👍 不错的伙伴",
-      text: "你们有很多共同点，稍微沟通一下就能愉快地一起旅行。"
+      title: "👍 还能抢救一下",
+      text: "虽然偶尔会掐架，但大部分时间还是能愉快玩耍的。"
     });
   } else if (score >= 40) {
     analysis.push({
-      title: "🤝 需要磨合",
-      text: "你们的旅行习惯有些差异，出发前好好沟通很重要。"
+      title: "🤝 建议签个和平协议",
+      text: "出发前先约法三章，谁先发火谁请吃饭。"
     });
   } else {
     analysis.push({
-      title: "💡 风格差异较大",
-      text: "你们的旅行方式很不一样，如果一起旅行需要更多包容和沟通。"
+      title: "🚶 建议分头行动",
+      text: "建议在酒店门口分手，各玩各的，晚上再汇合。"
     });
   }
   
@@ -435,10 +535,10 @@ function getTravelStyle(answers) {
   const style = Object.keys(counts).find(key => counts[key] === maxCount);
   
   const styles = {
-    planner: { name: "严谨规划型", desc: "喜欢制定详细计划，每一步都安排妥当，追求效率和确定性", icon: "📋" },
-    explorer: { name: "随性探索型", desc: "享受旅途中的意外惊喜，喜欢随遇而安，不被计划束缚", icon: "🧭" },
-    enjoyer: { name: "慢享生活型", desc: "注重旅行体验，不急于打卡，更在意感受当地文化和氛围", icon: "☕" },
-    active: { name: "精力充沛型", desc: "行程安排得满满当当，珍惜每一分钟，希望看到更多风景", icon: "⚡" }
+    planner: { name: "攻略卷王", desc: "Excel比导游还专业，行程表精确到分钟，每一分钱都算得明明白白。跟你旅行，闭着眼跟走就行。", icon: "imgs/planner_折纸人.jpg" },
+    explorer: { name: "街溜子行为艺术家", desc: "迷路是常态，惊喜是常态，主打一个「走到哪算哪」。地图？那是给俗人用的，你有直觉导航。", icon: "imgs/explorer_折纸人.jpg" },
+    enjoyer: { name: "饭点守护者", desc: "什么景点都不如一顿好饭重要，到点必须吃饭，天塌下来也要先找个舒服的地方躺平。", icon: "imgs/enjoyer_折纸人.jpg" },
+    active: { name: "人型永动机", desc: "一天刷5个景点还能再战通宵，朋友圈步数永远霸榜，摄影师都跟不上你的节奏。", icon: "imgs/active_折纸人.jpg" }
   };
   
   return styles[style];
