@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旅行搭子匹配测试 - 答题中</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="quiz-header">
+            <h2 id="inviterTitle">旅行搭子匹配测试</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">第 1 / 10 题</div>
+        </div>
+
+        <div class="question-card">
+            <h3 class="question-title" id="questionTitle">问题标题</h3>
+            <p class="question-desc" id="questionDesc">问题描述</p>
+            
+            <div class="options-container" id="optionsContainer">
+                <!-- 选项会通过JS动态生成 -->
+            </div>
+        </div>
+
+        <div class="nav-buttons">
+            <button id="prevBtn" class="btn btn-secondary" disabled>
+                ← 上一题
+            </button>
+            <button id="nextBtn" class="btn btn-primary">
+                下一题 →
+            </button>
+        </div>
+
+        <div class="share-section" id="shareSection" style="display: none;">
+            <p>答题完成！分享给你的旅伴一起测试吧</p>
+            <button id="shareBtn" class="btn btn-secondary">
+                📤 复制邀请链接
+            </button>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="questions.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
